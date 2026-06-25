@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Headphones, Music2, Radio, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,9 @@ const stars = [
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resetToken = searchParams.get("resetToken") ?? "";
+  const next = searchParams.get("next");
   const [mode, setMode] = useState<AuthMode>("login");
   const [login, setLogin] = useState("");
   const [email, setEmail] = useState("");
@@ -36,69 +39,114 @@ export default function LoginPage() {
   const [resetPassword, setResetPassword] = useState("");
   const [resetPasswordRepeat, setResetPasswordRepeat] = useState("");
   const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const resetToken = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("resetToken") ?? "";
-  const title = resetToken || mode === "reset" ? "Восстановление доступа" : mode === "login" ? "С возвращением!" : "Регистрация";
-  const subtitle =
-    resetToken || mode === "reset"
-      ? "Вернем доступ к комнате и медиатеке."
-      : mode === "login"
-        ? "Мы так рады видеть вас снова!"
-        : "Создайте профиль для совместного прослушивания.";
+
+  const isReset = Boolean(resetToken) || mode === "reset";
+  const title = isReset ? "Восстановление доступа" : mode === "login" ? "С возвращением!" : "Регистрация";
+  const subtitle = isReset
+    ? "Вернем доступ к комнатам и медиатеке."
+    : mode === "login"
+      ? "Войдите в RoomWave, чтобы слушать музыку вместе."
+      : "Создайте профиль для совместного прослушивания.";
 
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
-    setError(null);
+    setMessage(null);
+  }
+
+  function validateAuthForm() {
+    if (mode === "login") {
+      if (!login.trim() || !password) return "Введите логин или почту и пароль.";
+      return null;
+    }
+
+    if (name.trim().length < 2) return "Имя должно быть минимум 2 символа.";
+    if (login.trim().length < 3) return "Логин должен быть минимум 3 символа.";
+    if (!email.includes("@")) return "Введите корректную почту.";
+    if (password.length < 8) return "Пароль должен быть минимум 8 символов.";
+    if (password !== passwordRepeat) return "Пароли не совпадают.";
+    return null;
   }
 
   async function submit() {
     if (mode === "reset") return requestPasswordReset();
 
+    const validationError = validateAuthForm();
+    if (validationError) {
+      setMessage(validationError);
+      return;
+    }
+
     setBusy(true);
-    setError(null);
-    const response = await fetch(`/api/auth/${mode}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(mode === "login" ? { login, password } : { email, username: login, password, passwordRepeat, name })
-    });
-    setBusy(false);
-    const payload = await response.json();
-    if (!response.ok) return setError(payload.error ?? "Ошибка входа.");
-    const next = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("next");
-    router.push(next?.startsWith("/") ? next : "/app");
-    router.refresh();
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/auth/${mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mode === "login" ? { login, password } : { email, username: login, password, passwordRepeat, name })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setMessage(payload?.error ?? "Не удалось выполнить действие. Проверьте данные.");
+        return;
+      }
+      router.push(next?.startsWith("/") ? next : "/app");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function requestPasswordReset() {
+    const targetEmail = resetEmail.trim() || login.trim();
+    if (!targetEmail) {
+      setMessage("Введите почту аккаунта.");
+      return;
+    }
+
     setBusy(true);
-    setError(null);
-    const response = await fetch("/api/auth/password-reset", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: resetEmail || login })
-    });
-    setBusy(false);
-    const payload = await response.json().catch(() => null);
-    setError(
-      response.ok
-        ? `Если почта существует, мы отправили ссылку.${payload?.devToken ? ` Dev token: ${payload.devToken}` : ""}`
-        : payload?.error ?? "Не удалось отправить ссылку."
-    );
+    setMessage(null);
+    try {
+      const response = await fetch("/api/auth/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: targetEmail })
+      });
+      const payload = await response.json().catch(() => null);
+      setMessage(
+        response.ok
+          ? `Если почта существует, мы отправили ссылку.${payload?.devToken ? ` Dev token: ${payload.devToken}` : ""}`
+          : payload?.error ?? "Не удалось отправить ссылку."
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function resetPasswordNow() {
+    if (resetPassword.length < 8) {
+      setMessage("Новый пароль должен быть минимум 8 символов.");
+      return;
+    }
+    if (resetPassword !== resetPasswordRepeat) {
+      setMessage("Пароли не совпадают.");
+      return;
+    }
+
     setBusy(true);
-    setError(null);
-    const response = await fetch("/api/auth/password-reset", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: resetToken, password: resetPassword, passwordRepeat: resetPasswordRepeat })
-    });
-    setBusy(false);
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) return setError(payload?.error ?? "Не удалось поменять пароль.");
-    setError("Пароль изменен. Теперь можно войти.");
+    setMessage(null);
+    try {
+      const response = await fetch("/api/auth/password-reset", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: resetToken, password: resetPassword, passwordRepeat: resetPasswordRepeat })
+      });
+      const payload = await response.json().catch(() => null);
+      setMessage(response.ok ? "Пароль изменен. Теперь можно войти." : payload?.error ?? "Не удалось поменять пароль.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -133,14 +181,8 @@ export default function LoginPage() {
               <div className="grid gap-3">
                 <p className="text-sm font-bold text-white">Новый пароль</p>
                 <Input className="h-11 border-white/10 bg-[#14151a] text-white" type="password" placeholder="Новый пароль" value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} />
-                <Input
-                  className="h-11 border-white/10 bg-[#14151a] text-white"
-                  type="password"
-                  placeholder="Повторите пароль"
-                  value={resetPasswordRepeat}
-                  onChange={(event) => setResetPasswordRepeat(event.target.value)}
-                />
-                <Button className="mt-2 h-11 bg-primary text-primary-foreground hover:bg-primary/90" disabled={busy || resetPassword.length < 8} onClick={resetPasswordNow}>
+                <Input className="h-11 border-white/10 bg-[#14151a] text-white" type="password" placeholder="Повторите пароль" value={resetPasswordRepeat} onChange={(event) => setResetPasswordRepeat(event.target.value)} />
+                <Button className="mt-2 h-11 bg-primary text-primary-foreground hover:bg-primary/90" disabled={busy} onClick={resetPasswordNow}>
                   Сменить пароль
                 </Button>
               </div>
@@ -148,15 +190,9 @@ export default function LoginPage() {
               <div className="grid gap-4">
                 <label className="grid gap-2 text-xs font-bold uppercase tracking-normal text-white/82">
                   Почта аккаунта
-                  <Input
-                    className="h-11 border-white/10 bg-[#14151a] text-white placeholder:text-white/32"
-                    type="email"
-                    placeholder="Введите почту"
-                    value={resetEmail}
-                    onChange={(event) => setResetEmail(event.target.value)}
-                  />
+                  <Input className="h-11 border-white/10 bg-[#14151a] text-white placeholder:text-white/32" type="email" placeholder="Введите почту" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} />
                 </label>
-                <Button className="h-11 bg-primary text-primary-foreground hover:bg-primary/90" disabled={busy || !resetEmail} onClick={requestPasswordReset}>
+                <Button className="h-11 bg-primary text-primary-foreground hover:bg-primary/90" disabled={busy} onClick={requestPasswordReset}>
                   Отправить ссылку
                 </Button>
                 <button className="justify-self-start text-sm font-semibold text-primary hover:text-white" onClick={() => switchMode("login")}>
@@ -184,23 +220,17 @@ export default function LoginPage() {
                 <Input className="h-11 border-white/10 bg-[#14151a] text-white placeholder:text-white/38" placeholder="Имя" value={name} onChange={(event) => setName(event.target.value)} />
                 <Input className="h-11 border-white/10 bg-[#14151a] text-white placeholder:text-white/38" placeholder="Логин" value={login} onChange={(event) => setLogin(event.target.value)} />
                 <Input className="h-11 border-white/10 bg-[#14151a] text-white placeholder:text-white/38" type="email" placeholder="Почта" value={email} onChange={(event) => setEmail(event.target.value)} />
-                <Input className="h-11 border-white/10 bg-[#14151a] text-white placeholder:text-white/38" type="password" placeholder="Пароль" value={password} onChange={(event) => setPassword(event.target.value)} />
-                <Input
-                  className="h-11 border-white/10 bg-[#14151a] text-white placeholder:text-white/38"
-                  type="password"
-                  placeholder="Повторите пароль"
-                  value={passwordRepeat}
-                  onChange={(event) => setPasswordRepeat(event.target.value)}
-                />
+                <Input className="h-11 border-white/10 bg-[#14151a] text-white placeholder:text-white/38" type="password" placeholder="Пароль минимум 8 символов" value={password} onChange={(event) => setPassword(event.target.value)} />
+                <Input className="h-11 border-white/10 bg-[#14151a] text-white placeholder:text-white/38" type="password" placeholder="Повторите пароль" value={passwordRepeat} onChange={(event) => setPasswordRepeat(event.target.value)} />
               </div>
             )}
 
-            {error ? <p className="mt-4 rounded-xl bg-red-500/12 px-3 py-2 text-sm text-red-200">{error}</p> : null}
+            {message ? <p className="mt-4 rounded-xl bg-red-500/12 px-3 py-2 text-sm text-red-100">{message}</p> : null}
 
             {!resetToken && mode !== "reset" ? (
               <>
                 <Button className="mt-5 h-11 w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={busy} onClick={submit}>
-                  {busy ? "Подождите..." : mode === "login" ? "Вход" : "Создать аккаунт"}
+                  {busy ? "Подождите..." : mode === "login" ? "Войти" : "Создать аккаунт"}
                 </Button>
 
                 {mode === "login" ? (

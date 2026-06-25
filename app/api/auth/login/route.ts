@@ -6,7 +6,7 @@ import { createSession } from "@/lib/auth/session";
 import { checkRateLimit, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 
 const schema = z.object({
-  login: z.string().min(1),
+  login: z.string().trim().min(1),
   password: z.string().min(1)
 });
 
@@ -15,15 +15,28 @@ export async function POST(request: Request) {
   if (!limit.ok) return rateLimitResponse(limit.retryAfterMs);
 
   const parsed = schema.safeParse(await request.json());
-  if (!parsed.success) return NextResponse.json({ error: "Введите логин и пароль." }, { status: 400 });
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Введите логин или почту и пароль." }, { status: 400 });
+  }
 
+  const login = parsed.data.login;
   const user = await prisma.user.findFirst({
-    where: { OR: [{ username: parsed.data.login }, { email: parsed.data.login }] }
+    where: { OR: [{ username: login }, { email: login.toLowerCase() }] }
   });
+
   if (!user || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) {
-    return NextResponse.json({ error: "Неверный email или пароль." }, { status: 401 });
+    return NextResponse.json({ error: "Неверный логин, почта или пароль." }, { status: 401 });
   }
 
   await createSession(user.id);
-  return NextResponse.json({ user: { id: user.id, email: user.email, username: user.username, name: user.name, avatarUrl: user.avatarUrl, status: user.status } });
+  return NextResponse.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+      status: user.status
+    }
+  });
 }
