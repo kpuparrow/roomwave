@@ -1,5 +1,5 @@
 import type { ServerRole } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "./prisma";
 
 const roleRank: Record<ServerRole, number> = {
   OWNER: 5,

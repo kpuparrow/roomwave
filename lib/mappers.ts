@@ -1,5 +1,5 @@
 import type { PlayerState, QueueItem, Track, User } from "@prisma/client";
-import type { PlayerStateDTO, QueueItemDTO, TrackDTO, UserProfile } from "@/lib/types";
+import type { PlayerStateDTO, QueueItemDTO, TrackDTO, UserProfile } from "./types";
 
 export function toUserProfile(user: Pick<User, "id" | "email" | "username" | "name" | "avatarUrl" | "status">): UserProfile {
   return {

@@ -1,4 +1,4 @@
-import type { ChatMessageDTO, PlayerStateDTO, QueueItemDTO, QueueVoteDTO, RoomReactionDTO, TrackDTO, UserProfile, VoiceStateDTO } from "@/lib/types";
+import type { ChatMessageDTO, PlayerStateDTO, QueueItemDTO, QueueVoteDTO, RoomReactionDTO, TrackDTO, UserProfile, VoiceStateDTO } from "./types";
 
 export type ClientToServerEvents = {
   "room:join": (payload: { roomId: string; user: UserProfile }) => void;

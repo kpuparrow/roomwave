@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/prisma";
-import { toPlayerStateDTO, toQueueItemDTO } from "@/lib/mappers";
+import { prisma } from "../prisma";
+import { toPlayerStateDTO, toQueueItemDTO } from "../mappers";
 
 export async function getRoomPlaybackState(roomId: string) {
   const [state, queue] = await Promise.all([
