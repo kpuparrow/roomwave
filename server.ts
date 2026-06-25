@@ -1,13 +1,13 @@
 import { createServer } from "node:http";
 import next from "next";
 import { Server } from "socket.io";
-import { env } from "@/lib/env";
-import type { ClientToServerEvents, ServerToClientEvents } from "@/lib/socket-events";
-import type { ChatMessageDTO, UserProfile, VoiceStateDTO } from "@/lib/types";
-import { addTrackToQueue, getRoomPlaybackState, playTrackNow, removeQueueItem, reorderQueue, setPlayback, setPlayerOptions, shuffleQueue, skipTrack, voteForTrack } from "@/lib/realtime/room-store";
-import { toQueueItemDTO } from "@/lib/mappers";
-import { canUseRoom } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { env } from "./lib/env";
+import type { ClientToServerEvents, ServerToClientEvents } from "./lib/socket-events";
+import type { ChatMessageDTO, UserProfile, VoiceStateDTO } from "./lib/types";
+import { addTrackToQueue, getRoomPlaybackState, playTrackNow, removeQueueItem, reorderQueue, setPlayback, setPlayerOptions, shuffleQueue, skipTrack, voteForTrack } from "./lib/realtime/room-store";
+import { toQueueItemDTO } from "./lib/mappers";
+import { canUseRoom } from "./lib/permissions";
+import { prisma } from "./lib/prisma";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = env.HOSTNAME;
