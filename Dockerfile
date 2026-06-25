@@ -24,5 +24,5 @@ COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/server.ts ./server.ts
 COPY --from=builder /app/next.config.mjs ./next.config.mjs
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:3000/api/health || exit 1
-CMD ["npm", "run", "start"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- "http://127.0.0.1:${PORT:-3000}/api/health" || exit 1
+CMD ["sh", "-c", "npx prisma migrate deploy && npm run start"]

@@ -27,35 +27,43 @@ export async function POST(request: Request) {
   const limit = checkRateLimit(`auth:register:${getClientIp(request)}`, { limit: 5, windowMs: 60_000 });
   if (!limit.ok) return rateLimitResponse(limit.retryAfterMs);
 
-  const parsed = schema.safeParse(await request.json());
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Проверьте почту, логин, имя и пароль." }, { status: 400 });
-  }
-
-  const { email, username, password, name } = parsed.data;
-  const existing = await prisma.user.findFirst({ where: { OR: [{ email }, { username }] } });
-  if (existing) {
-    return NextResponse.json({ error: "Пользователь с такой почтой или логином уже существует." }, { status: 409 });
-  }
-
-  const user = await prisma.user.create({
-    data: {
-      email,
-      username,
-      name,
-      passwordHash: await bcrypt.hash(password, 12)
+  try {
+    const parsed = schema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Проверьте почту, логин, имя и пароль." }, { status: 400 });
     }
-  });
 
-  await createSession(user.id);
-  return NextResponse.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      name: user.name,
-      avatarUrl: user.avatarUrl,
-      status: user.status
+    const { email, username, password, name } = parsed.data;
+    const existing = await prisma.user.findFirst({ where: { OR: [{ email }, { username }] } });
+    if (existing) {
+      return NextResponse.json({ error: "Пользователь с такой почтой или логином уже существует." }, { status: 409 });
     }
-  });
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        username,
+        name,
+        passwordHash: await bcrypt.hash(password, 12)
+      }
+    });
+
+    await createSession(user.id);
+    return NextResponse.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        status: user.status
+      }
+    });
+  } catch (error) {
+    console.error("Registration failed", error);
+    return NextResponse.json(
+      { error: "Не удалось создать аккаунт. Проверьте подключение к базе данных и миграции Prisma в Railway." },
+      { status: 500 }
+    );
+  }
 }
