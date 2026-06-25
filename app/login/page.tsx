@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Headphones, Music2, Radio, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,24 @@ const stars = [
 ];
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginPageFallback />}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageFallback() {
+  return (
+    <main className="grid min-h-screen place-items-center bg-[#07070b] text-white">
+      <div className="rounded-2xl border border-white/10 bg-white/[.04] px-6 py-4 text-sm font-semibold text-white/70">
+        Загрузка RoomWave...
+      </div>
+    </main>
+  );
+}
+
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const resetToken = searchParams.get("resetToken") ?? "";
