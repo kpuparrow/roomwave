@@ -1,0 +1,379 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoomRole {
+  HOST
+  LISTENER
+}
+
+enum TrackSource {
+  LOCAL
+  APPLE_MUSIC
+}
+
+enum ServerRole {
+  OWNER
+  ADMIN
+  DJ
+  MEMBER
+  GUEST
+}
+
+enum ServerVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum RepeatMode {
+  OFF
+  ONE
+  ALL
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  username     String?      @unique
+  passwordHash String
+  name         String
+  avatarUrl    String?
+  status       String       @default("Слушаю вместе")
+  emailVerifiedAt DateTime?
+  sessionVersion Int        @default(0)
+  servers      ServerMember[]
+  uploads      Track[]      @relation("UploadedTracks")
+  memberships  RoomMember[]
+  favorites    FavoriteTrack[]
+  playlists    Playlist[]
+  history      ListeningHistory[]
+  createdInvites Invite[]   @relation("CreatedInvites")
+  reports      Report[]     @relation("ReportAuthor")
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens PasswordResetToken[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Server {
+  id        String         @id @default(cuid())
+  name      String
+  description String?
+  iconUrl   String?
+  ownerId   String
+  visibility ServerVisibility @default(PRIVATE)
+  inviteCode String?       @unique
+  mood      String?
+  liveArtworkUrl String?
+  publicSession Boolean    @default(false)
+  djBattleEnabled Boolean  @default(false)
+  rooms     MusicRoom[]
+  members   ServerMember[]
+  invites   Invite[]
+  bans      ServerBan[]
+  auditLogs ServerAuditLog[]
+  reports   Report[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([ownerId])
+}
+
+model ServerMember {
+  id       String @id @default(cuid())
+  userId   String
+  serverId String
+  role     ServerRole @default(MEMBER)
+  mutedUntil DateTime?
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  joinedAt DateTime @default(now())
+
+  @@unique([userId, serverId])
+  @@index([serverId, role])
+}
+
+model MusicRoom {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  mood        String?
+  roomArtworkUrl String?
+  isPublicSession Boolean  @default(false)
+  djBattleEnabled Boolean  @default(false)
+  serverId    String
+  hostId      String?
+  server      Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  members     RoomMember[]
+  queue       QueueItem[]
+  playerState PlayerState?
+  reactions   RoomReaction[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([serverId])
+}
+
+model RoomMember {
+  id       String    @id @default(cuid())
+  userId   String
+  roomId   String
+  role     RoomRole  @default(LISTENER)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room     MusicRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  joinedAt DateTime  @default(now())
+
+  @@unique([userId, roomId])
+}
+
+model Track {
+  id           String      @id @default(cuid())
+  source       TrackSource @default(LOCAL)
+  title        String
+  artist       String?
+  album        String?
+  durationMs   Int?
+  audioUrl     String?
+  previewUrl   String?
+  coverUrl     String?
+  appleMusicId String?     @unique
+  mimeType     String?
+  sizeBytes    Int?
+  uploadedById String?
+  uploadedBy   User?       @relation("UploadedTracks", fields: [uploadedById], references: [id], onDelete: SetNull)
+  lyrics       LyricsFile[]
+  queueItems   QueueItem[]
+  favoritedBy  FavoriteTrack[]
+  playlistItems PlaylistTrack[]
+  history      ListeningHistory[]
+  votes        TrackVote[]
+  reactions    RoomReaction[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([uploadedById])
+  @@index([appleMusicId])
+}
+
+model QueueItem {
+  id        String    @id @default(cuid())
+  roomId    String
+  trackId   String
+  position  Int
+  addedById String?
+  room      MusicRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  track     Track     @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  votes     TrackVote[]
+  createdAt DateTime  @default(now())
+
+  @@unique([roomId, position])
+  @@index([roomId])
+}
+
+model PlayerState {
+  id             String    @id @default(cuid())
+  roomId         String    @unique
+  currentTrackId String?
+  isPlaying      Boolean   @default(false)
+  positionMs     Int       @default(0)
+  shuffle        Boolean   @default(false)
+  repeatMode     RepeatMode @default(OFF)
+  crossfadeSeconds Int     @default(0)
+  updatedById    String?
+  updatedAt      DateTime  @updatedAt
+  room           MusicRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+model LyricsFile {
+  id        String   @id @default(cuid())
+  trackId   String
+  filename  String
+  rawText   String
+  parsed    Json?
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([trackId])
+}
+
+model FavoriteTrack {
+  id        String   @id @default(cuid())
+  userId    String
+  trackId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, trackId])
+  @@index([userId])
+  @@index([trackId])
+}
+
+model Invite {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  serverId    String
+  createdById String
+  expiresAt   DateTime?
+  maxUses     Int?
+  uses        Int       @default(0)
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  server      Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  createdBy   User      @relation("CreatedInvites", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+  @@index([code])
+}
+
+model ServerBan {
+  id         String    @id @default(cuid())
+  serverId   String
+  userId     String?
+  email      String?
+  reason     String?
+  bannedById String?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  server     Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+  @@index([userId])
+}
+
+model ServerAuditLog {
+  id        String   @id @default(cuid())
+  serverId  String
+  actorId   String?
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+  @@index([actorId])
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  serverId    String
+  reporterId  String
+  targetUserId String?
+  messageId   String?
+  reason      String
+  status      ReportStatus @default(OPEN)
+  createdAt   DateTime     @default(now())
+  resolvedAt  DateTime?
+  server      Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  reporter    User         @relation("ReportAuthor", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+  @@index([reporterId])
+}
+
+model Playlist {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  coverUrl    String?
+  isPublic    Boolean  @default(false)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tracks      PlaylistTrack[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model PlaylistTrack {
+  id         String   @id @default(cuid())
+  playlistId String
+  trackId    String
+  position   Int
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  addedAt    DateTime @default(now())
+
+  @@unique([playlistId, position])
+  @@unique([playlistId, trackId])
+  @@index([trackId])
+}
+
+model ListeningHistory {
+  id         String   @id @default(cuid())
+  userId     String
+  trackId    String
+  roomId     String?
+  positionMs Int?
+  listenedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([userId, listenedAt])
+  @@index([trackId])
+}
+
+model RoomReaction {
+  id        String    @id @default(cuid())
+  roomId    String
+  trackId   String?
+  userId    String
+  emoji     String
+  createdAt DateTime  @default(now())
+  room      MusicRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  track     Track?    @relation(fields: [trackId], references: [id], onDelete: SetNull)
+
+  @@index([roomId, createdAt])
+}
+
+model TrackVote {
+  id          String    @id @default(cuid())
+  roomId      String
+  queueItemId String?
+  trackId     String
+  userId      String
+  score       Int       @default(1)
+  createdAt   DateTime  @default(now())
+  queueItem   QueueItem? @relation(fields: [queueItemId], references: [id], onDelete: Cascade)
+  track       Track     @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId, trackId])
+  @@index([roomId])
+  @@index([queueItemId])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
