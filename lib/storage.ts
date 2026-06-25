@@ -28,13 +28,13 @@ export async function saveStorageObject(bucket: StorageBucket, filename: string,
     };
   }
 
-  const uploadRoot = path.join(process.cwd(), "public", "uploads");
+  const uploadRoot = getLocalUploadRoot();
   const directory = path.join(uploadRoot, bucket);
   await mkdir(directory, { recursive: true });
   await writeFile(path.join(directory, filename), data);
 
   return {
-    publicUrl: `/uploads/${bucket}/${filename}`,
+    publicUrl: `/api/uploads/${bucket}/${filename}`,
     storageKey
   };
 }
@@ -46,13 +46,17 @@ export async function deleteStorageObjectByPublicUrl(publicUrl: string | null | 
     await createS3Client().send(new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: key })).catch(() => undefined);
     return;
   }
-  if (!publicUrl.startsWith("/uploads/")) return;
+  if (!publicUrl.startsWith("/uploads/") && !publicUrl.startsWith("/api/uploads/")) return;
 
-  const uploadRoot = path.resolve(process.cwd(), "public", "uploads");
-  const relativeKey = publicUrl.replace(/^\/uploads\//, "");
+  const uploadRoot = getLocalUploadRoot();
+  const relativeKey = publicUrl.replace(/^\/api\/uploads\//, "").replace(/^\/uploads\//, "");
   const target = path.resolve(uploadRoot, relativeKey);
   if (!target.startsWith(uploadRoot)) return;
   await rm(target, { force: true });
+}
+
+export function getLocalUploadRoot() {
+  return path.resolve(process.env.UPLOADS_DIR || path.join(process.cwd(), "public", "uploads"));
 }
 
 function hasS3Config() {
